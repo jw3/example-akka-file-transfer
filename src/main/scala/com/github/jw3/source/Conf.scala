@@ -1,6 +1,6 @@
 package com.github.jw3.source
 
-import java.nio.file.Paths
+import java.nio.file.Path
 
 import akka.http.scaladsl.model.Uri
 import eri.commons.config.SSConfig
@@ -14,7 +14,6 @@ object conf {
   val path = source.uri.as[String]
   val uri: Uri = s"/$path"
 
-  val dir = source.dir.as[String]
-  val filename = source.filename.as[String]
-  val file = Paths.get(dir, filename).toFile
+  val file = source.file.as[Path].toFile
+  val filename = file.getName
 }

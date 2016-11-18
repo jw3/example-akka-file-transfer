@@ -5,7 +5,7 @@ example pipe service
 pipe file upload from one service into another
 
 1. Update application.conf
- - `source.dir`, `source.filename` to point to sample file
+ - `source.file` → file to transfer
 
 2. Run `com.github.jw3.Boot`
 
@@ -15,5 +15,5 @@ See `Server` implementations in each package for details
 
 
 #### next
-
-the pipe should be able to customize the source and dest requests based on the request it was called with
+- the pipe should be able to customize the source and dest requests based on the request it was called with
+- proper error handling examples
