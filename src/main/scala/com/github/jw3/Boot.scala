@@ -8,7 +8,7 @@ object Boot extends App with LazyLogging {
   implicit val system = ActorSystem()
   implicit val mat = ActorMaterializer()
 
-  source.Boot.main(Array())
-  dest.Boot.main(Array())
-  pipe.Boot.main(Array())
+  source.Boot.main(args)
+  dest.Boot.main(args)
+  pipe.Boot.main(args)
 }
