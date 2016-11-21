@@ -41,8 +41,11 @@ class Server(implicit mat: ActorMaterializer) extends Actor with ActorLogging {
         get {
           val f = Source.single(HttpRequest(uri = source.conf.uri)).via(streams.source)
                   .map(r ⇒ Multipart.FormData(Multipart.FormData.BodyPart(source.conf.filename, HttpEntity(ContentTypes.`text/plain(UTF-8)`, size(r), r.entity.dataBytes), Map("filename" → source.conf.filename))))
-                  .mapAsync(1)(r ⇒ Marshal(r).to[RequestEntity])
-                  .mapAsync(1)(r ⇒ Source.single(HttpRequest(method = HttpMethods.POST, uri = dest.conf.uri, entity = r)).via(streams.dest).runWith(Sink.head))
+                  .mapAsync(1)(r ⇒
+                    Source.fromFuture(Marshal(r).to[RequestEntity])
+                    .map(e ⇒ HttpRequest(method = HttpMethods.POST, uri = dest.conf.uri, entity = e))
+                    .via(streams.dest).runWith(Sink.head)
+                  )
                   .runWith(Sink.head)
 
           complete(f)
