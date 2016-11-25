@@ -37,7 +37,7 @@ class Server(implicit mat: ActorMaterializer) extends Actor with ActorLogging {
       path(dest.conf.path) {
         post {
           fileUpload(source.conf.filename) { d ⇒
-            val f = d._2.map(_.utf8String).runWith(Sink.head)
+            val f = d._2.runWith(Sink.ignore)
             complete(f)
           }
         }
