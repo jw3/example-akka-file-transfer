@@ -37,14 +37,16 @@ class Server(implicit mat: ActorMaterializer) extends Actor with ActorLogging {
     implicit val timeout = Timeout(10 seconds)
 
     logRequest("---SOURCE---") {
+      pathPrefix("slow") {
+        path(source.conf.path) {
+          complete {
+            HttpEntity.Default(ContentTypes.`text/plain(UTF-8)`, source.conf.file.length,
+              FileIO.fromPath(source.conf.file.toPath, 1).map { v ⇒ Thread.sleep(10); v })
+          }
+        }
+      } ~
       path(source.conf.path) {
         getFromFile(source.conf.file)
-      } ~
-      path("slow") {
-        complete {
-          HttpEntity.Default(ContentTypes.`text/plain(UTF-8)`, source.conf.file.length,
-            FileIO.fromPath(source.conf.file.toPath, 1).map { v ⇒ Thread.sleep(100); v })
-        }
       }
     }
   }

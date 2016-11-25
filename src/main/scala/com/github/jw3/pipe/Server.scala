@@ -41,28 +41,38 @@ class Server(implicit mat: ActorMaterializer) extends Actor with ActorLogging {
   }
 
   val routes = {
-    import context.system
     implicit val timeout = Timeout(10 seconds)
 
     logRequest("---PIPE---") {
-      pathPrefix(pipe.conf.path) {
-        get {
-          val tap = context.actorOf(Tap.props)
-          // need to tap this transfer with a actor as a listener to provide status to webhook endpoints
-          val f = Source.single(HttpRequest(uri = source.conf.uri)).via(streams.source)
-                  .alsoTo(Sink.foreach(r ⇒ tap ! Initialize(size(r))))
-                  .map(r ⇒ Multipart.FormData(Multipart.FormData.BodyPart(source.conf.filename, HttpEntity(ContentTypes.`text/plain(UTF-8)`, size(r), r.entity.dataBytes.via(Tap.to(tap))), Map("filename" → source.conf.filename))))
-                  .mapAsync(1)(r ⇒
-                    Source.fromFuture(Marshal(r).to[RequestEntity])
-                    .map(e ⇒ HttpRequest(method = HttpMethods.POST, uri = dest.conf.uri, entity = e))
-                    .via(streams.dest).runWith(Sink.head)
-                  )
-                  .runWith(Sink.head)
-
-          complete(f)
+      get {
+        pathPrefix("slow") {
+          path(pipe.conf.path) {
+            pipestream(s"/slow/${source.conf.path}")
+          }
+        } ~
+        path(pipe.conf.path) {
+          pipestream()
         }
       }
     }
+  }
+
+  def pipestream(src: Uri = source.conf.uri) = {
+    import context.system
+
+    val tap = context.actorOf(Tap.props)
+    // need to tap this transfer with a actor as a listener to provide status to webhook endpoints
+    val f = Source.single(HttpRequest(uri = src)).via(streams.source)
+            .alsoTo(Sink.foreach(r ⇒ tap ! Initialize(size(r))))
+            .map(r ⇒ Multipart.FormData(Multipart.FormData.BodyPart(source.conf.filename, HttpEntity(ContentTypes.`text/plain(UTF-8)`, size(r), r.entity.dataBytes.via(Tap.to(tap))), Map("filename" → source.conf.filename))))
+            .mapAsync(1)(r ⇒
+              Source.fromFuture(Marshal(r).to[RequestEntity])
+              .map(e ⇒ HttpRequest(method = HttpMethods.POST, uri = dest.conf.uri, entity = e))
+              .via(streams.dest).runWith(Sink.head)
+            )
+            .runWith(Sink.head)
+
+    complete(f)
   }
 
   def receive: Receive = {
