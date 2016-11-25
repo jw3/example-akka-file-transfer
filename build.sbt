@@ -20,8 +20,8 @@ scalacOptions ++= Seq(
 )
 
 libraryDependencies ++= {
-  val akkaVersion = "2.4.12"
-  val akkaHttpVersion = "2.4.11"
+  val akkaVersion = "2.4.14"
+  val akkaHttpVersion = "10.0.0"
   val scalatestVersion = "3.0.0"
 
   Seq(
@@ -32,8 +32,8 @@ libraryDependencies ++= {
     "com.typesafe.akka" %% "akka-stream" % akkaVersion,
 
     "com.typesafe.akka" %% "akka-http-core" % akkaHttpVersion,
-    "com.typesafe.akka" %% "akka-http-experimental" % akkaHttpVersion,
-    "com.typesafe.akka" %% "akka-http-spray-json-experimental" % akkaHttpVersion,
+    "com.typesafe.akka" %% "akka-http" % akkaHttpVersion,
+    "com.typesafe.akka" %% "akka-http-spray-json" % akkaHttpVersion,
 
     "com.typesafe.scala-logging" %% "scala-logging" % "3.1.0",
 
