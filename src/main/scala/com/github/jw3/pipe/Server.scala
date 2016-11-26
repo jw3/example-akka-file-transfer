@@ -1,17 +1,21 @@
 package com.github.jw3.pipe
 
+import java.util.UUID
+
 import akka.Done
 import akka.actor.{Actor, ActorLogging, ActorRef, PoisonPill, Props}
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshalling.Marshal
+import akka.http.scaladsl.model.ws.{Message, TextMessage}
 import akka.http.scaladsl.model.{HttpEntity, _}
 import akka.http.scaladsl.server.Directives._
-import akka.stream.ActorMaterializer
+import akka.http.scaladsl.server._
 import akka.stream.scaladsl.{Flow, Sink, Source}
+import akka.stream.{ActorMaterializer, OverflowStrategy}
 import akka.util.{ByteString, Timeout}
 import com.github.jw3._
 import com.github.jw3.pipe.Server._
-import com.github.jw3.pipe.Tap.Initialize
+import com.github.jw3.pipe.Tap._
 
 import scala.concurrent.duration._
 import scala.util.{Failure, Success}
@@ -52,6 +56,17 @@ class Server(implicit mat: ActorMaterializer) extends Actor with ActorLogging {
         } ~
         path(pipe.conf.path) {
           pipestream()
+        } ~
+        path("hook" / Segment) { streamId ⇒
+          extractStream(streamId) { stream ⇒
+            extractUpgradeToWebSocket { upgrade ⇒
+              complete {
+                val sink = Sink.actorRef[Message](stream, Mute(stream))
+                val source = Source.actorRef[TextMessage](10, OverflowStrategy.fail).mapMaterializedValue(stream ! Listen(_))
+                upgrade.handleMessages(Flow.fromSinkAndSource(sink, source))
+              }
+            }
+          }
         }
       }
     }
@@ -60,7 +75,9 @@ class Server(implicit mat: ActorMaterializer) extends Actor with ActorLogging {
   def pipestream(src: Uri = source.conf.uri) = {
     import context.system
 
-    val tap = context.actorOf(Tap.props)
+    val id = UUID.randomUUID.toString.take(7)
+    println(s"creating stream: $id")
+    val tap = context.actorOf(Tap.props, "abc")
     // need to tap this transfer with a actor as a listener to provide status to webhook endpoints
     val f = Source.single(HttpRequest(uri = src)).via(streams.source)
             .alsoTo(Sink.foreach(r ⇒ tap ! Initialize(size(r))))
@@ -75,6 +92,13 @@ class Server(implicit mat: ActorMaterializer) extends Actor with ActorLogging {
     complete(f)
   }
 
+  def extractStream(streamId: String)(fn: ActorRef ⇒ Route)(implicit to: Timeout) = {
+    onComplete(context.actorSelection(streamId).resolveOne()) {
+      case Failure(_) ⇒ complete(StatusCodes.NotFound)
+      case Success(m) ⇒ fn(m)
+    }
+  }
+
   def receive: Receive = {
     case _ ⇒
   }
@@ -85,6 +109,10 @@ object Tap {
   def to(tap: ActorRef) = Flow[ByteString].alsoTo(Sink.actorRef(tap, Done))
 
   case class Initialize(sz: Long)
+  case object TapComplete
+
+  case class Listen(ref: ActorRef)
+  case class Mute(ref: ActorRef)
 }
 
 class Tap extends Actor {
@@ -93,16 +121,31 @@ class Tap extends Actor {
   }
 
   def ready(sz: Long): Receive = {
+    var listeners = Seq[ActorRef]()
     var pos: Long = 0
 
     {
       case v: ByteString ⇒
         pos += v.length
-        println(s"tapped[${v.utf8String}] [$pos/$sz]")
 
-      case Done ⇒
+        val message = s"tapped[${v.utf8String}] [$pos/$sz]"
+        println(message)
+        listeners.foreach { l ⇒
+          println("sending to listener")
+          l ! TextMessage(message)
+        }
+
+      case TapComplete ⇒
         println("----TAP Complete----")
         self ! PoisonPill
+
+      case Listen(ref) ⇒
+        println("----Listen----")
+        listeners ++= Seq(ref)
+
+      case Mute(ref) ⇒
+        println("----Mute----")
+        listeners = listeners.filterNot(_ == ref)
     }
   }
 }
